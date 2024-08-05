@@ -15,12 +15,8 @@ public:
       py::array_t<T, py::array::c_style | py::array::forcecast> array,
       int order) {
     py::buffer_info buf = array.request();
-    if (buf.ndim != 3)
-      throw std::runtime_error("Number of dimensions must be 3");
-    int dim = buf.shape[0];
-    if (buf.shape[1] != dim || buf.shape[2] != dim)
-      throw std::runtime_error("Input must be a cube");
 
+    int dim = buf.shape[0];
     T *ptr = static_cast<T *>(buf.ptr);
     descriptor = std::make_unique<ZernikeDescriptor<T, T>>(ptr, dim, order);
   }

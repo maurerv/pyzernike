@@ -22,6 +22,15 @@ class ZernikeDescriptor:
         else:
             raise NotImplementedError(f"Descriptor not implemented for {data.dtype}.")
 
+        if data.ndim != 3:
+            raise ValueError(f"data needs to have ndim 3, got {data.ndim}.")
+
+        if data.shape[1] != data.shape[0] or data.shape[2] != data.shape[0]:
+            raise ValueError("Input must be a cube.")
+
+        if np.sum(data >= 0) <= 0:
+            raise ValueError("No data values larger than zero found.")
+
         descriptor = func(data, order=order)
         return cls(descriptor=descriptor)
 

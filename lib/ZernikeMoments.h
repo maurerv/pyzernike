@@ -38,34 +38,36 @@ for more information, see the paper:
  *                                                                           *
 \*===========================================================================*/
 
-#ifndef ZERNIKEMOMENTS_H
-#define ZERNIKEMOMENTS_H
+#pragma once
 
-#pragma warning(disable : 4267)
+#define PI 3.141592653589793
 
-// ----- local program includes -----
+#include <complex>
+#include <cstdlib>
+#include <ios>
+#include <omp.h>
+#include <set>
+
 #include "Binomial.h"
 #include "Factorial.h"
 #include "ScaledGeometricMoments.h"
 
-// ----- std includes -----
-#include <complex>
-#include <cstdlib>
-#include <ios>
-#include <set>
-
-#define PI 3.141592653589793
-
 /**
- * Struct representing a complex coefficient of a moment
- * of order (p_,q_,r_)
+ * Struct representing a complex coefficient of a moment of order (p_,q_,r_).
  */
 template <class T> struct ComplexCoeff {
   typedef std::complex<T> ValueT;
 
-  ComplexCoeff(int, int, int, const ValueT &);
-  ComplexCoeff(const ComplexCoeff<T> &_cc);
-  ComplexCoeff();
+  // Constructor with scalar args
+  ComplexCoeff(int p, int q, int r, const ValueT &value)
+      : p_(p), q_(q), r_(r), value_(value) {}
+
+  // Copy constructor
+  ComplexCoeff(const ComplexCoeff<T> &cc)
+      : p_(cc.p_), q_(cc.q_), r_(cc.r_), value_(cc.value_) {}
+
+  // Default constructor
+  ComplexCoeff() : p_(0), q_(0), r_(0) {}
 
   int p_, q_, r_;
   ValueT value_;
@@ -76,7 +78,6 @@ template <class T> struct ComplexCoeff {
  */
 template <class VoxelT, class MomentT> class ZernikeMoments {
 public:
-  // ---- public typedefs ----
   typedef MomentT T;
   typedef vector<T> T1D;   // vector of scalar type
   typedef vector<T1D> T2D; // 2D array of scalar type
@@ -91,41 +92,212 @@ public:
   typedef vector<vector<vector<vector<ComplexCoeffT>>>> ComplexCoeffT4D;
 
 public:
-  // ---- public member functions ----
-  ZernikeMoments(int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm);
-  ZernikeMoments();
+  ZernikeMoments() : order_(0) {}
+  ZernikeMoments(int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm) {
+    Init(_order, _gm);
+  }
 
-  /* Todo: Init() doesn't depend on the geomentrical moments.
-   * Removing the  parameter and moving it to Compute() will make the class more
-   * efficient to reuse to compute ZM for several objects at once.
+  /**
+   * Computes all coefficients that are input data independent
    */
-  void Init(int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm);
-  void Compute();
+  void Init(int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm) {
+    gm_ = _gm;
+    order_ = _order;
 
-  ComplexT GetMoment(int _n, int _l, int _m);
+    ComputeCs();
+    ComputeQs();
+    ComputeGCoefficients();
+  }
 
-  // ---- debug functions/arguments ----
-  void
-  Reconstruct(ComplexT3D &_grid, // grid containing the reconstructed function
-              T _xCOG,           // center of gravity
-              T _yCOG, T _zCOG,
-              T _scale,         // scaling factor to map into unit ball
-              int _minN = 0,    // min value for n freq index
-              int _maxN = 100,  // min value for n freq index
-              int _minL = 0,    // min value for l freq index
-              int _maxL = 100); // max value for l freq index
+  /**
+   * Computes the Zernike moments for current object.
+   */
+  void Compute() {
+    // geometrical moments have to be computed first
+    if (!order_) {
+      std::cerr
+          << "ZernikeMoments<VoxelT,MomentT>::ComputeZernikeMoments (): attempting to \
+                       compute Zernike moments without setting valid geometrical \
+                       moments first. \nExiting...\n";
+      exit(-1);
+    }
+
+    /*
+     indexing:
+       n goes 0..order_
+       l goes 0..n so that n-l is even
+       m goes -l..l
+    */
+
+    T nullMoment;
+    zernikeMoments_.resize(order_ + 1);
+    for (int n = 0; n <= order_; ++n) {
+      zernikeMoments_[n].resize(n / 2 + 1);
+
+      int l0 = n % 2, li = 0;
+      for (int l = l0; l <= n; ++li, l += 2) {
+        zernikeMoments_[n][li].resize(l + 1);
+        for (int m = 0; m <= l; ++m) {
+          // Zernike moment of according indices [nlm]
+          ComplexT zm((T)0, (T)0);
+
+          int nCoeffs = (int)gCoeffs_[n][li][m].size();
+          for (int i = 0; i < nCoeffs; ++i) {
+            ComplexCoeffT cc = gCoeffs_[n][li][m][i];
+            zm += std::conj(cc.value_) * gm_.GetMoment(cc.p_, cc.q_, cc.r_);
+          }
+
+          zm *= (T)(3.0 / (4.0 * PI));
+          if (n == 0 && l == 0 && m == 0) {
+            // FixMe Unused variable! What is it for?
+            nullMoment = zm.real();
+          }
+          zernikeMoments_[n][li][m] = zm;
+        }
+      }
+    }
+  }
+
+  /**
+   *  Access Zernike Moments.
+   *
+   * @param _n Order along x.
+   * @param _l Order along y.
+   * @param _m Order along z.
+   * @return Complex Moment.
+   */
+  inline ComplexT GetMoment(int _n, int _l, int _m) {
+    if (_m >= 0) {
+      return zernikeMoments_[_n][_l / 2][_m];
+    } else {
+      T sign;
+      if (_m % 2) {
+        sign = (T)(-1);
+      } else {
+        sign = (T)1;
+      }
+      return sign * std::conj(zernikeMoments_[_n][_l / 2][abs(_m)]);
+    }
+  }
+  /**
+   *  Reconstructs the original object from the computed moments.
+   *
+   * @param _grid Complex output grid.
+   * @param _xCOG Scaled center of gravity.
+   * @param _yCOG Scaled center of gravity.
+   * @param _zCOG Scaled center of gravity.
+   * @param _minN Min value for n freq index.
+   * @param _maxN Max value for n freq index.
+   * @param _minL Max value for l freq index.
+   * @param _maxL Max value for l freq index.
+   */
+  void Reconstruct(ComplexT3D &_grid, T _xCOG, T _yCOG, T _zCOG, T _scale,
+                   int _minN, int _maxN, int _minL, int _maxL) {
+    if (_maxN == 100)
+      _maxN = order_;
+
+    int dimX = _grid.size();
+    int dimY = _grid[0].size();
+    int dimZ = _grid[0][0].size();
+
+    // translation
+    T vx = _xCOG;
+    T vy = _yCOG;
+    T vz = _zCOG;
+
+    // Unit sphere constraints
+    T dxy2, dxyz2;
+    std::vector<T> dx(dimX), dx2(dimX);
+    std::vector<T> dy(dimY), dy2(dimY);
+    std::vector<T> dz(dimZ), dz2(dimZ);
+
+    for (int i = 0; i < dimX; ++i) {
+      dx[i] = ((T)i - vx) * _scale;
+      dx2[i] = dx[i] * dx[i];
+    }
+    for (int i = 0; i < dimY; ++i) {
+      dy[i] = ((T)i - vy) * _scale;
+      dy2[i] = dy[i] * dy[i];
+    }
+    for (int i = 0; i < dimZ; ++i) {
+      dz[i] = ((T)i - vz) * _scale;
+      dz2[i] = dz[i] * dz[i];
+    }
+
+// origin is at the grid center, all voxels are projected onto the unit sphere
+#pragma omp parallel for
+    for (int x = 0; x < dimX; ++x) {
+#pragma omp critical
+      {
+        int id = omp_get_thread_num();
+        std::cout << "Thread[" << id << "]: Reconstructing layer: " << x
+                  << std::endl;
+      }
+      for (int y = 0; y < dimY; ++y) {
+        dxy2 = dx2[y] + dy2[x];
+        for (int z = 0; z < dimZ; ++z) {
+          dxyz2 = dxy2 + dz2[z];
+
+          if (dxyz2 > 1.0)
+            continue;
+
+          // function value at point
+          ComplexT fVal = (0, 0);
+          for (int n = _minN; n <= _maxN; ++n) {
+            int maxK = n / 2;
+            for (int k = 0; k <= maxK; ++k) {
+              for (int nu = 0; nu <= k; ++nu) {
+                // check whether l is within bounds
+                int l = n - 2 * k;
+                if (l < _minL || l > _maxL)
+                  continue;
+
+                for (int m = -l; m <= l; ++m) {
+                  // zernike polynomial evaluated at point
+                  ComplexT zp(0, 0);
+
+                  int absM = std::abs(m);
+
+                  int nCoeffs = gCoeffs_[n][l / 2][absM].size();
+                  for (int i = 0; i < nCoeffs; ++i) {
+                    ComplexCoeffT cc = gCoeffs_[n][l / 2][absM][i];
+                    ComplexT cvalue = cc.value_;
+
+                    // conjugate if m negative and take care of sign
+                    if (m < 0) {
+                      cvalue = std::conj(cvalue);
+                      if (m % 2)
+                        cvalue *= (T)(-1);
+                    }
+
+                    zp += cvalue * std::pow(dx[x], (T)cc.p_) *
+                          std::pow(dy[y], (T)cc.q_) * std::pow(dz[z], (T)cc.r_);
+                  }
+
+                  fVal += zp * GetMoment(n, l, m);
+                }
+              }
+            }
+          }
+          _grid[x][y][z] = fVal;
+        }
+      }
+    }
+
+    // NormalizeGridValues (_grid);
+  }
 
   void NormalizeGridValues(ComplexT3D &_grid);
   void CheckOrthonormality(int _n1, int _l1, int _m1, int _n2, int _l2,
                            int _m2);
 
 private:
-  // ---- private member functions ----
   void ComputeCs();
   void ComputeQs();
   void ComputeGCoefficients();
+  T EvalMonomialIntegral(int _p, int _q, int _r, int _dim);
 
-  // ---- private attributes -----
+private:
   ComplexCoeffT4D gCoeffs_;   // coefficients of the geometric moments
   ComplexT3D zernikeMoments_; // nomen est omen
   T3D qs_; // q coefficients (radial polynomial normalization)
@@ -133,76 +305,7 @@ private:
 
   ScaledGeometricalMoments<VoxelT, MomentT> gm_;
   int order_; // := max{n} according to indexing of Zernike polynomials
-
-  // ---- debug functions/arguments ----
-  void PrintGrid(ComplexT3D &_grid);
-  T EvalMonomialIntegral(int _p, int _q, int _r, int _dim);
 };
-
-// Moved from ZernikeMoments.inl
-template <class VoxelT, class MomentT>
-inline typename ZernikeMoments<VoxelT, MomentT>::ComplexT
-ZernikeMoments<VoxelT, MomentT>::GetMoment(int _n, int _l, int _m) {
-  if (_m >= 0) {
-    return zernikeMoments_[_n][_l / 2][_m];
-  } else {
-    T sign;
-    if (_m % 2) {
-      sign = (T)(-1);
-    } else {
-      sign = (T)1;
-    }
-    return sign * std::conj(zernikeMoments_[_n][_l / 2][abs(_m)]);
-  }
-}
-
-// Moved from ZernikeMoments.cpp
-/**
- * Copy constructor
- */
-template <class T>
-ComplexCoeff<T>::ComplexCoeff(const ComplexCoeff<T> &_cc)
-    : p_(_cc.p_), q_(_cc.q_), r_(_cc.r_), value_(_cc.value_) {}
-
-/**
- * Constructor with scalar args
- */
-template <class T>
-ComplexCoeff<T>::ComplexCoeff(int _p, int _q, int _r, const ValueT &_value)
-    : p_(_p), q_(_q), r_(_r), value_(_value) {}
-
-/**
- * Default constructor
- */
-template <class T> ComplexCoeff<T>::ComplexCoeff() : p_(0), q_(0), r_(0) {}
-
-// ---------- implementation of ZernikeMoments class -------------
-template <class VoxelT, class MomentT>
-ZernikeMoments<VoxelT, MomentT>::ZernikeMoments(
-    int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm) {
-  Init(_order, _gm);
-}
-
-template <class VoxelT, class MomentT>
-ZernikeMoments<VoxelT, MomentT>::ZernikeMoments() : order_(0) {}
-
-/**
- * Computes all coefficients that are input data independent
- */
-template <class VoxelT, class MomentT>
-void ZernikeMoments<VoxelT, MomentT>::Init(
-    int _order, ScaledGeometricalMoments<VoxelT, MomentT> &_gm) {
-  /* Todo: Init() doesn't depend on the geomentrical moments.
-   * Removing the  parameter and moving it to Compute() will make the class more
-   * efficient to reuse to compute ZM for several objects at once.
-   */
-  gm_ = _gm;
-  order_ = _order;
-
-  ComputeCs();
-  ComputeQs();
-  ComputeGCoefficients();
-}
 
 /**
  * Computes all the normalizing factors $c_l^m$ for harmonic polynomials e
@@ -338,11 +441,6 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
                     int y_i = 2 * (mu - q + beta) + m - p;
                     int x_i = 2 * q + p + 2 * alpha;
                     // DD
-                    // std::cout << x_i << " " << y_i << " " << z_i;
-                    // std::cout << "\t" << n << " " << l << " " << m;
-                    // std::cout << "\t" << c.real () << " " << c.imag () <<
-                    // std::endl;
-                    // DD
                     ComplexCoeffT cc(x_i, y_i, z_i, c);
                     gCoeffs_[n][li][m].push_back(cc);
                     // DD
@@ -360,154 +458,6 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
   // DD
   std::cout << countCoeffs << std::endl;
   // DD
-}
-
-/**
- * Computes the Zernike moments. This computation is data dependent
- * and has to be performed for each new object and/or transformation.
- */
-template <class VoxelT, class MomentT>
-void ZernikeMoments<VoxelT, MomentT>::Compute() {
-  // geometrical moments have to be computed first
-  if (!order_) {
-    std::cerr
-        << "ZernikeMoments<VoxelT,MomentT>::ComputeZernikeMoments (): attempting to \
-                     compute Zernike moments without setting valid geometrical \
-                     moments first. \nExiting...\n";
-    exit(-1);
-  }
-
-  /*
-   indexing:
-     n goes 0..order_
-     l goes 0..n so that n-l is even
-     m goes -l..l
-  */
-
-  T nullMoment;
-
-  zernikeMoments_.resize(order_ + 1);
-  for (int n = 0; n <= order_; ++n) {
-    zernikeMoments_[n].resize(n / 2 + 1);
-
-    int l0 = n % 2, li = 0;
-    for (int l = l0; l <= n; ++li, l += 2) {
-      zernikeMoments_[n][li].resize(l + 1);
-      for (int m = 0; m <= l; ++m) {
-        // Zernike moment of according indices [nlm]
-        ComplexT zm((T)0, (T)0);
-
-        int nCoeffs = (int)gCoeffs_[n][li][m].size();
-        for (int i = 0; i < nCoeffs; ++i) {
-          ComplexCoeffT cc = gCoeffs_[n][li][m][i];
-          // T scale = gm_.GetScale ();
-          // T fact = std::pow (scale, cc.p_+cc.q_+cc.r_+3);
-
-          // zm +=  std::conj (cc.value_) * gm_.GetMoment(cc.p_, cc.q_, cc.r_) *
-          // fact;
-          zm += std::conj(cc.value_) * gm_.GetMoment(cc.p_, cc.q_, cc.r_);
-        }
-
-        zm *= (T)(3.0 / (4.0 * PI));
-        if (n == 0 && l == 0 && m == 0) {
-          // FixMe Unused variable! What is it for?
-          nullMoment = zm.real();
-        }
-        zernikeMoments_[n][li][m] = zm;
-
-        // std::cout << "zernike moment[nlm]: " << n << "\t" << l << "\t" << m
-        // << "\t" << zernikeMoments_[n][li][m] << "\n";
-      }
-    }
-  }
-}
-
-/**
- * The function previously encoded as complex valued Zernike
- * moments, is reconstructed. _grid is the output grid containing
- * the reconstructed function.
- */
-template <class VoxelT, class MomentT>
-void ZernikeMoments<VoxelT, MomentT>::Reconstruct(ComplexT3D &_grid, T _xCOG,
-                                                  T _yCOG, T _zCOG, T _scale,
-                                                  int _minN, int _maxN,
-                                                  int _minL, int _maxL) {
-  int dimX = _grid.size();
-  int dimY = _grid[0].size();
-  int dimZ = _grid[0][0].size();
-
-  // translation
-  T vx = _xCOG;
-  T vy = _yCOG;
-  T vz = _zCOG;
-
-  T dx, dy, dz;
-  T dx2, dxy2, dxyz2;
-
-  if (_maxN == 100)
-    _maxN = order_;
-
-  // origin is at the grid center, all voxels are projected onto the unit sphere
-  for (int x = 0; x < dimX; ++x) {
-    std::cout << x << ". layer being processed\n";
-    dx = ((T)x - vx) * _scale;
-    dx2 = dx * dx;
-    for (int y = 0; y < dimY; ++y) {
-      dy = ((T)y - vy) * _scale;
-      dxy2 = dx2 + dy * dy;
-      if (dxyz2 > 1.0)
-        continue;
-
-      for (int z = 0; z < dimZ; ++z) {
-        T dz = ((T)z - vz) * _scale;
-        dxyz2 = dxy2 + dz * dz;
-        if (dxyz2 > 1.0)
-          continue;
-
-        // function value at point
-        ComplexT fVal = (0, 0);
-        for (int n = _minN; n <= _maxN; ++n) {
-          int maxK = n / 2;
-          for (int k = 0; k <= maxK; ++k) {
-            for (int nu = 0; nu <= k; ++nu) {
-              // check whether l is within bounds
-              int l = n - 2 * k;
-              if (l < _minL || l > _maxL)
-                continue;
-
-              for (int m = -l; m <= l; ++m) {
-                // zernike polynomial evaluated at point
-                ComplexT zp(0, 0);
-
-                int absM = std::abs(m);
-
-                int nCoeffs = gCoeffs_[n][l / 2][absM].size();
-                for (int i = 0; i < nCoeffs; ++i) {
-                  ComplexCoeffT cc = gCoeffs_[n][l / 2][absM][i];
-                  ComplexT cvalue = cc.value_;
-
-                  // conjugate if m negative and take care of sign
-                  if (m < 0) {
-                    cvalue = std::conj(cvalue);
-                    if (m % 2)
-                      cvalue *= (T)(-1);
-                  }
-
-                  zp += cvalue * std::pow(dx, (T)cc.p_) *
-                        std::pow(dy, (T)cc.q_) * std::pow(dz, (T)cc.r_);
-                }
-
-                fVal += zp * GetMoment(n, l, m);
-              }
-            }
-          }
-        }
-        _grid[x][y][z] = fVal;
-      }
-    }
-  }
-
-  // NormalizeGridValues (_grid);
 }
 
 template <class VoxelT, class MomentT>
@@ -528,9 +478,7 @@ void ZernikeMoments<VoxelT, MomentT>::NormalizeGridValues(ComplexT3D &_grid) {
   }
 
   std::cout << "\nMaximal value in grid: " << max << "\n";
-
   T invMax = (T)1 / max;
-
   for (int k = 0; k < zD; ++k) {
     for (int j = 0; j < yD; ++j) {
       for (int i = 0; i < xD; ++i) {
@@ -538,39 +486,6 @@ void ZernikeMoments<VoxelT, MomentT>::NormalizeGridValues(ComplexT3D &_grid) {
       }
     }
   }
-}
-
-template <class VoxelT, class MomentT>
-void ZernikeMoments<VoxelT, MomentT>::PrintGrid(ComplexT3D &_grid) {
-  int xD = _grid.size();
-  int yD = _grid[0].size();
-  int zD = _grid[0][0].size();
-
-  std::cout.setf(std::ios_base::scientific, std::ios_base::floatfield);
-
-  T max = (T)0;
-  for (int k = 0; k < zD; ++k) {
-    for (int j = 0; j < yD; ++j) {
-      for (int i = 0; i < xD; ++i) {
-        if (fabs(_grid[i][j][k].real()) > max) {
-          max = fabs(_grid[i][j][k].real());
-        }
-      }
-    }
-  }
-
-  for (int k = 0; k < zD; ++k) {
-    std::cout << k << ". layer:\n";
-    for (int j = 0; j < yD; ++j) {
-      for (int i = 0; i < xD; ++i) {
-        // std::cout << _grid[i][j][k].real () / max << "\t";
-        std::cout << _grid[i][j][k].real() << "\t";
-      }
-      std::cout << "\n";
-    }
-    std::cout << "\n";
-  }
-  std::cout.setf(std::ios_base::fmtflags(0), std::ios_base::floatfield);
 }
 
 template <class VoxelT, class MomentT>
@@ -644,5 +559,3 @@ MomentT ZernikeMoments<VoxelT, MomentT>::EvalMonomialIntegral(int _p, int _q,
   result *= (T)(3.0 / (4.0 * PI)) * scale;
   return result;
 }
-
-#endif

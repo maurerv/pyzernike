@@ -38,42 +38,38 @@ for more information, see the paper:
  *                                                                           *
 \*===========================================================================*/
 
-#ifndef SCALEDGEOMETRICALMOMENTS_H
-#define SCALEDGEOMETRICALMOMENTS_H
+#pragma once
 
 #include <vector>
 
-using std::vector;
-
 /**
-    Class for computing the scaled, pre-integrated geometrical moments.
-    These tricks are needed to make the computation numerically stable.
-    See the paper for more details.
-    \param VoxelT   type of the voxel values
-    \param MomentT  type of the moments -- recommended to be double
+ * Class for computing the scaled, pre-integrated geometrical moments.
  */
 template <class VoxelT, class MomentT> class ScaledGeometricalMoments {
 public:
-  // ---- public typedefs ----
-  /// the moment type
-  typedef MomentT T;
-  /// vector scalar type
-  typedef vector<T> T1D;
-  /// 2D array scalar type
-  typedef vector<T1D> T2D;
-  /// 3D array scalar type
-  typedef vector<T2D> T3D;
-  /// vector scalar type
-  typedef vector<double> Double1D;
-  /// vector scalar type
-  typedef vector<Double1D> Double2D;
-
+  typedef MomentT T;                      // the moment type
+  typedef std::vector<T> T1D;             // vector scalar type
+  typedef std::vector<T1D> T2D;           // 2D array scalar type
+  typedef std::vector<T2D> T3D;           // 3D array scalar type
+  typedef std::vector<double> Double1D;   // vector scalar type
+  typedef std::vector<Double1D> Double2D; // vector scalar type
   typedef typename T1D::iterator T1DIter;
 
-  // ----- public methods -----
+  ScaledGeometricalMoments() {}
 
-  // ---- construction / init ----
-  /// Contructor
+  /**
+   * Constructor.
+   *
+   * @param _voxels Input voxel grid.
+   * @param _xDim x-dimension of the input voxel grid.
+   * @param _yDim z-dimension of the input voxel grid.
+   * @param _yDim y-dimension of the input voxel grid.
+   * @param _xCOG x-coord of the center of gravity.
+   * @param _yCOG y-coord of the center of gravity.
+   * @param _zCOG z-coord of the center of gravity.
+   * @param _scale Scaling factor.
+   * @param _maxOrderMaximal order to compute moments for.
+   */
   ScaledGeometricalMoments(
       const VoxelT *_voxels, /**< input voxel grid */
       int _xDim,             /**< x-dimension of the input voxel grid */
@@ -84,110 +80,92 @@ public:
       double _zCOG,          /**< z-coord of the center of gravity */
       double _scale,         /**< scaling factor */
       int _maxOrder = 1      /**< maximal order to compute moments for */
-  );
+  ) {
+    Init(_voxels, _xDim, _yDim, _zDim, _xCOG, _yCOG, _zCOG, _scale, _maxOrder);
+  }
 
-  /// Default constructor
-  ScaledGeometricalMoments();
+  /**
+   * The init function used by the contructors.
+   */
+  void Init(const VoxelT *_voxels, int _xDim, int _yDim, int _zDim,
+            double _xCOG, double _yCOG, double _zCOG, double _scale,
+            int _maxOrder = 1) {
+    xDim_ = _xDim;
+    yDim_ = _yDim;
+    zDim_ = _zDim;
 
-  /// The init function used by the contructors
-  void Init(const VoxelT *_voxels, /**< input voxel grid */
-            int _xDim,             /**< x-dimension of the input voxel grid */
-            int _yDim,             /**< y-dimension of the input voxel grid */
-            int _zDim,             /**< z-dimension of the input voxel grid */
-            double _xCOG,          /**< x-coord of the center of gravity */
-            double _yCOG,          /**< y-coord of the center of gravity */
-            double _zCOG,          /**< z-coord of the center of gravity */
-            double _scale,         /**< scaling factor */
-            int _maxOrder = 1      /**< maximal order to compute moments for */
-  );
+    maxOrder_ = _maxOrder;
 
-  /// Access function
-  T GetMoment(int _i, /**< order along x */
-              int _j, /**< order along y */
-              int _k  /**< order along z */
-  );
+    size_t totalSize = xDim_ * yDim_ * zDim_;
+    voxels_.resize(totalSize);
+    for (int i = 0; i < totalSize; ++i) {
+      voxels_[i] = _voxels[i];
+    }
+
+    moments_.resize(maxOrder_ + 1);
+    for (int i = 0; i <= maxOrder_; ++i) {
+      moments_[i].resize(maxOrder_ - i + 1);
+      for (int j = 0; j <= maxOrder_ - i; ++j) {
+        moments_[i][j].resize(maxOrder_ - i - j + 1);
+      }
+    }
+
+    ComputeSamples(_xCOG, _yCOG, _zCOG, _scale);
+
+    Compute();
+  }
+
+  /**
+   *  Access Geometrical Moments.
+   *
+   * @param _n Order along x.
+   * @param _l Order along y.
+   * @param _m Order along z.
+   * @return Complex Moment.
+   */
+  T GetMoment(int _i, int _j, int _k) { return moments_[_i][_j][_k]; }
 
 private:
-  int xDim_, // dimensions
-      yDim_, zDim_,
-      maxOrder_; // maximal order of the moments
-
-  T2D samples_; // samples of the scaled and translated grid in x, y, z
-  T1D voxels_;  // array containing the voxel grid
-  T3D moments_; // array containing the cumulative moments
-
-  // ---- private functions ----
   void Compute();
-  void ComputeSamples(double _xCOG, double _yCOG, double _zCOG, double _scale);
-  void ComputeDiffFunction(T1DIter _iter, T1DIter _diffIter, int _dim);
 
-  T Multiply(T1DIter _diffIter, T1DIter _sampleIter, int _dim);
+  void ComputeSamples(double _xCOG, double _yCOG, double _zCOG, double _scale) {
+    samples_.resize(3); // 3 dimensions
+
+    int dim[3] = {xDim_, yDim_, zDim_};
+    double min[3] = {(-_xCOG) * _scale, (-_yCOG) * _scale, (-_zCOG) * _scale};
+    for (int i = 0; i < 3; ++i) {
+      samples_[i].resize(dim[i] + 1);
+      for (int j = 0; j <= dim[i]; ++j) {
+        samples_[i][j] = min[i] + j * _scale;
+      }
+    }
+  }
+
+  void ComputeDiffFunction(T1DIter _iter, T1DIter _diffIter, int _dim) {
+    _diffIter[0] = -_iter[0];
+    for (int i = 1; i < _dim; ++i) {
+      _diffIter[i] = _iter[i - 1] - _iter[i];
+    }
+    _diffIter[_dim] = _iter[_dim - 1];
+  }
+
+  T Multiply(T1DIter _diffIter, T1DIter _sampleIter, int _dim) {
+    T sum = 0;
+    for (int i = 0; i < _dim; ++i) {
+      _diffIter[i] *= _sampleIter[i];
+      sum += _diffIter[i];
+    }
+    return sum;
+  }
+
+private:
+  int maxOrder_;           // maximal order of the moments
+  int xDim_, yDim_, zDim_; // Data dimensions
+
+  T1D voxels_;  // array containing the voxel grid
+  T2D samples_; // samples of the scaled and translated grid in x, y, z
+  T3D moments_; // array containing the cumulative moments
 };
-
-// Moved from ScaledGeometricMoments.cpp
-template <class VoxelT, class MomentT>
-ScaledGeometricalMoments<VoxelT, MomentT>::ScaledGeometricalMoments() {}
-
-template <class VoxelT, class MomentT>
-ScaledGeometricalMoments<VoxelT, MomentT>::ScaledGeometricalMoments(
-    const VoxelT *_voxels, int _xDim, int _yDim, int _zDim, double _xCOG,
-    double _yCOG, double _zCOG, double _scale, int _maxOrder) {
-  Init(_voxels, _xDim, _yDim, _zDim, _xCOG, _yCOG, _zCOG, _scale, _maxOrder);
-}
-
-template <class VoxelT, class MomentT>
-void ScaledGeometricalMoments<VoxelT, MomentT>::Init(
-    const VoxelT *_voxels, int _xDim, int _yDim, int _zDim, double _xCOG,
-    double _yCOG, double _zCOG, double _scale, int _maxOrder) {
-  xDim_ = _xDim;
-  yDim_ = _yDim;
-  zDim_ = _zDim;
-
-  maxOrder_ = _maxOrder;
-
-  size_t totalSize = xDim_ * yDim_ * zDim_;
-  voxels_.resize(totalSize);
-  for (int i = 0; i < totalSize; ++i) {
-    voxels_[i] = _voxels[i];
-  }
-
-  moments_.resize(maxOrder_ + 1);
-  for (int i = 0; i <= maxOrder_; ++i) {
-    moments_[i].resize(maxOrder_ - i + 1);
-    for (int j = 0; j <= maxOrder_ - i; ++j) {
-      moments_[i][j].resize(maxOrder_ - i - j + 1);
-    }
-  }
-
-  ComputeSamples(_xCOG, _yCOG, _zCOG, _scale);
-
-  Compute();
-}
-
-template <class VoxelT, class MomentT>
-void ScaledGeometricalMoments<VoxelT, MomentT>::ComputeSamples(double _xCOG,
-                                                               double _yCOG,
-                                                               double _zCOG,
-                                                               double _scale) {
-  samples_.resize(3); // 3 dimensions
-
-  int dim[3];
-  dim[0] = xDim_;
-  dim[1] = yDim_;
-  dim[2] = zDim_;
-
-  double min[3];
-  min[0] = (-_xCOG) * _scale;
-  min[1] = (-_yCOG) * _scale;
-  min[2] = (-_zCOG) * _scale;
-
-  for (int i = 0; i < 3; ++i) {
-    samples_[i].resize(dim[i] + 1);
-    for (int j = 0; j <= dim[i]; ++j) {
-      samples_[i][j] = min[i] + j * _scale;
-    }
-  }
-}
 
 template <class VoxelT, class MomentT>
 void ScaledGeometricalMoments<VoxelT, MomentT>::Compute() {
@@ -258,34 +236,3 @@ void ScaledGeometricalMoments<VoxelT, MomentT>::Compute() {
     }
   }
 }
-
-template <class VoxelT, class MomentT>
-void ScaledGeometricalMoments<VoxelT, MomentT>::ComputeDiffFunction(
-    T1DIter _iter, T1DIter _diffIter, int _dim) {
-  _diffIter[0] = -_iter[0];
-  for (int i = 1; i < _dim; ++i) {
-    _diffIter[i] = _iter[i - 1] - _iter[i];
-  }
-  _diffIter[_dim] = _iter[_dim - 1];
-}
-
-template <class VoxelT, class MomentT>
-MomentT ScaledGeometricalMoments<VoxelT, MomentT>::Multiply(T1DIter _diffIter,
-                                                            T1DIter _sampleIter,
-                                                            int _dim) {
-  T sum(0);
-  for (int i = 0; i < _dim; ++i) {
-    _diffIter[i] *= _sampleIter[i];
-    sum += _diffIter[i];
-  }
-
-  return sum;
-}
-
-template <class VoxelT, class MomentT>
-MomentT ScaledGeometricalMoments<VoxelT, MomentT>::GetMoment(int _i, int _j,
-                                                             int _k) {
-  return moments_[_i][_j][_k];
-}
-
-#endif

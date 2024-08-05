@@ -1,0 +1,17 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pyzernike"
+version = "0.1.0"
+authors = [
+  { name="Valentin Maurer", email="valentin.maurer@embl-hamburg.de" },
+]
+description = "A Python package to compute 3D zernike descriptors."
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]

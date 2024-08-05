@@ -51,6 +51,11 @@ public:
 
         return result;
     }
+
+    void SaveInvariants(const char* fname) {
+        descriptor->SaveInvariants(fname);
+    }
+
 };
 
 template<typename T>
@@ -62,6 +67,7 @@ void declare_zernike_descriptor(py::module &m, const std::string &type_suffix) {
         .def(py::init<py::array_t<T, py::array::c_style | py::array::forcecast>, int>(),
             py::arg("data"), py::arg("order"))
         .def("get_descriptors", &Class::GetDescriptors)
+        .def("save_invariants", &Class::SaveInvariants)
         .def("reconstruct", &Class::Reconstruct,
              py::arg("dim"), py::arg("min_n") = 0, py::arg("max_n") = 100, py::arg("min_l") = 0, py::arg("max_l") = 100);
 }

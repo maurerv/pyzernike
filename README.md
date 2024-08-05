@@ -23,6 +23,9 @@ coefficients = descriptor.get_coefficients()
 # Reconstruct the array
 arr_rec = descriptor.reconstruct(box_size = 50)
 
+# Write the coefficients to a binary file
+descriptor.save_invariants("coefficients.inv")
+
 ```
 
 ## Installation

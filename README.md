@@ -49,4 +49,4 @@ pyzernike provides Python bindings to C code written by Marcin Novotni, which wa
 
 M. Novotni, R. Klein "Shape Retrieval using 3D Zernike Descriptors" Computer Aided Design 2004; 36(11):1047-1062
 
-A copy of that code serving as the basis for this project was obtained from https://github.com/codingforfun/ZernikeMoments. pyzernike includes a range of modifications to the original code base to improve performance but faithfully implements the original derivations.
+A copy of that code serving as the basis for this project was obtained from [GitHub](https://github.com/codingforfun/ZernikeMoments). pyzernike includes a range of modifications to the original code base to improve performance but faithfully implements the original derivations.

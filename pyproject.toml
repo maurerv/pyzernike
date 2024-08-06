@@ -16,6 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+license = "GPL-2.0"
 
 [project.urls]
 "Homepage" = "https://github.com/maurerv/pyzernike"

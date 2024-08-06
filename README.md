@@ -38,6 +38,11 @@ We recommend installation using one of the following methods
 | Source   | `pip install git+https://github.com/maurerv/pyzernike`  |
 
 
+> [!NOTE]  
+> pyzernike uses OpenMP for parallelization. On ARM MacOS systems, `brew install llvm libomp` and
+> adding the llvm binary to PATH is required prior to pip install.
+
+
 ## Background
 
 pyzernike provides Python bindings to C code written by Marcin Novotni, which was distributed under a GPL license and provided with the [paper](https://cg.cs.uni-bonn.de/backend/v1/files/publications/novotni-2004-shape.pdf):
@@ -45,4 +50,3 @@ pyzernike provides Python bindings to C code written by Marcin Novotni, which wa
 M. Novotni, R. Klein "Shape Retrieval using 3D Zernike Descriptors" Computer Aided Design 2004; 36(11):1047-1062
 
 A copy of that code serving as the basis for this project was obtained from https://github.com/codingforfun/ZernikeMoments. pyzernike includes a range of modifications to the original code base to improve performance but faithfully implements the original derivations.
-

@@ -44,8 +44,7 @@ for more information, see the paper:
 #include <vector>
 
 /**
- * Class facilitating fast computation and retrieval of binomials using Pascal's
- * triangle.
+ * Class for computation and retrieval of binomials using Pascal's triangle.
  */
 template <class T> class Binomial {
 public:
@@ -54,11 +53,10 @@ public:
 
 public:
   /** Retrieves the binomial _i "over" _j */
-  static T Get(int _i, int _j) {
+  static inline T Get(int _i, int _j) {
     if (!pascalsTriangle_.size()) {
       ComputePascalsTriangle();
     }
-    assert(_i >= 0 && _j >= 0 && _i >= _j);
     return pascalsTriangle_[_j][_i - _j];
   }
 

@@ -227,12 +227,6 @@ public:
 // origin is at the grid center, all voxels are projected onto the unit sphere
 #pragma omp parallel for
     for (int x = 0; x < dimX; ++x) {
-#pragma omp critical
-      {
-        int id = omp_get_thread_num();
-        std::cout << "Thread[" << id << "]: Reconstructing layer: " << x
-                  << std::endl;
-      }
       for (int y = 0; y < dimY; ++y) {
         dxy2 = dx2[y] + dy2[x];
         for (int z = 0; z < dimZ; ++z) {
@@ -308,24 +302,20 @@ private:
 };
 
 /**
- * Computes all the normalizing factors $c_l^m$ for harmonic polynomials e
+ * Computes all the normalizing factors $c_l^m$ for harmonic polynomials
+ * Indexing
+ *  l goes from 0 to n
+ *  m goes from -l to l, in fact from 0 to l, since c(l,-m) = c (l,m)
  */
 template <class VoxelT, class MomentT>
 void ZernikeMoments<VoxelT, MomentT>::ComputeCs() {
-  /*
-   indexing:
-     l goes from 0 to n
-     m goes from -l to l, in fact from 0 to l, since c(l,-m) = c (l,m)
-  */
-
+  Factorial<T> factorial;
   cs_.resize(order_ + 1);
-
   for (int l = 0; l <= order_; ++l) {
     cs_[l].resize(l + 1);
     for (int m = 0; m <= l; ++m) {
-      T n_sqrt = ((T)2 * l + (T)1) * Factorial<T>::Get(l + 1, l + m);
-      T d_sqrt = Factorial<T>::Get(l - m + 1, l);
-
+      T n_sqrt = ((T)2 * l + (T)1) * factorial.Get(l + 1, l + m);
+      T d_sqrt = factorial.Get(l - m + 1, l);
       cs_[l][m] = sqrt(n_sqrt / d_sqrt);
     }
   }
@@ -334,18 +324,15 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeCs() {
 /**
  * Computes all coefficients q for orthonormalization of radial polynomials
  * in Zernike polynomials.
+ * Indexing
+ *  n goes 0..order_
+ *  l goes 0..n, so that n-l is even
+ *  mu goes 0..(n-l)/2
  */
 template <class VoxelT, class MomentT>
 void ZernikeMoments<VoxelT, MomentT>::ComputeQs() {
-  /*
-   indexing:
-     n goes 0..order_
-     l goes 0..n, so that n-l is even
-     mu goes 0..(n-l)/2
-  */
-
+  Binomial<T> binomial;
   qs_.resize(order_ + 1); // there is order_ + 1 n's
-
   for (int n = 0; n <= order_; ++n) {
     qs_[n].resize(n / 2 + 1); // there is floor(n/2) + 1 l's
 
@@ -354,19 +341,16 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeQs() {
       int k = (n - l) / 2;
 
       qs_[n][l / 2].resize(k + 1); // there is k+1 mu's
-
       for (int mu = 0; mu <= k; ++mu) {
-        T nom = Binomial<T>::Get(2 * k, k) * // nominator of straight part
-                Binomial<T>::Get(k, mu) *
-                Binomial<T>::Get(2 * (k + l + mu) + 1, 2 * k);
+        T nom = binomial.Get(2 * k, k) * // nominator of straight part
+                binomial.Get(k, mu) * binomial.Get(2 * (k + l + mu) + 1, 2 * k);
 
         if ((k + mu) % 2) {
           nom *= (T)(-1);
         }
 
-        T den = std::pow((T)2, (T)(2 * k)) * // denominator of straight part
-                Binomial<T>::Get(k + l + mu, k);
-
+        // denominator of straight part
+        T den = std::pow((T)2, (T)(2 * k)) * binomial.Get(k + l + mu, k);
         T n_sqrt = (T)(2 * l + 4 * k + 3); // nominator of sqrt part
         T d_sqrt = (T)3;                   // denominator of sqrt part
 
@@ -384,10 +368,10 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeQs() {
  */
 template <class VoxelT, class MomentT>
 void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
-  // DD
   int countCoeffs = 0;
-  // DD
   gCoeffs_.resize(order_ + 1);
+
+  Binomial<T> binomial;
   for (int n = 0; n <= order_; ++n) {
     gCoeffs_[n].resize(n / 2 + 1);
     int li = 0, l0 = n % 2;
@@ -400,18 +384,18 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
         for (int nu = 0; nu <= k; ++nu) {
           T w_Nu = w * qs_[n][li][nu];
           for (int alpha = 0; alpha <= nu; ++alpha) {
-            T w_NuA = w_Nu * Binomial<T>::Get(nu, alpha);
+            T w_NuA = w_Nu * binomial.Get(nu, alpha);
             for (int beta = 0; beta <= nu - alpha; ++beta) {
-              T w_NuAB = w_NuA * Binomial<T>::Get(nu - alpha, beta);
+              T w_NuAB = w_NuA * binomial.Get(nu - alpha, beta);
               for (int p = 0; p <= m; ++p) {
-                T w_NuABP = w_NuAB * Binomial<T>::Get(m, p);
+                T w_NuABP = w_NuAB * binomial.Get(m, p);
                 for (int mu = 0; mu <= (l - m) / 2; ++mu) {
-                  T w_NuABPMu = w_NuABP * Binomial<T>::Get(l, mu) *
-                                Binomial<T>::Get(l - mu, m + mu) /
+                  T w_NuABPMu = w_NuABP * binomial.Get(l, mu) *
+                                binomial.Get(l - mu, m + mu) /
                                 (T)pow(2.0, (double)(2 * mu));
                   for (int q = 0; q <= mu; ++q) {
                     // the absolute value of the coefficient
-                    T w_NuABPMuQ = w_NuABPMu * Binomial<T>::Get(mu, q);
+                    T w_NuABPMuQ = w_NuABPMu * binomial.Get(mu, q);
 
                     // the sign
                     if ((m - p + mu) % 2) {
@@ -440,12 +424,11 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
                     int z_i = l - m + 2 * (nu - alpha - beta - mu);
                     int y_i = 2 * (mu - q + beta) + m - p;
                     int x_i = 2 * q + p + 2 * alpha;
-                    // DD
+
                     ComplexCoeffT cc(x_i, y_i, z_i, c);
                     gCoeffs_[n][li][m].push_back(cc);
-                    // DD
                     countCoeffs++;
-                    // DD
+
                   } // q
                 } // mu
               } // p
@@ -455,9 +438,6 @@ void ZernikeMoments<VoxelT, MomentT>::ComputeGCoefficients() {
       } // m
     } // l
   } // n
-  // DD
-  std::cout << countCoeffs << std::endl;
-  // DD
 }
 
 template <class VoxelT, class MomentT>

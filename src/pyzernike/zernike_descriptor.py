@@ -1,5 +1,12 @@
-import numpy as np
+#!python3
+""" Implements 3D Zernike Descriptors.
 
+    Copyright (c) 2024 European Molecular Biology Laboratory
+
+    Author: Valentin Maurer <valentin.maurer@embl-hamburg.de>
+"""
+
+import numpy as np
 from numpy.typing import NDArray
 
 
@@ -34,11 +41,11 @@ class ZernikeDescriptor:
         descriptor = func(data, order=order)
         return cls(descriptor=descriptor)
 
-    def get_coefficients(self):
+    def get_coefficients(self) -> NDArray:
         return self._descriptor.get_descriptors()
 
     def save_invariants(self, filepath: str) -> None:
         return self._descriptor.save_invariants(filepath)
 
-    def reconstruct(self, box_size: int) -> NDArray:
+    def reconstruct(self, box_size: int, verbose: bool = False) -> NDArray:
         return self._descriptor.reconstruct(dim=box_size)

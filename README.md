@@ -38,7 +38,7 @@ We recommend installation using one of the following methods
 | Source   | `pip install git+https://github.com/maurerv/pyzernike`  |
 
 
-> [!NOTE]  
+> [!TIP] 
 > pyzernike uses OpenMP for parallelization. On ARM MacOS systems, `brew install llvm libomp` and
 > adding the llvm binary to PATH is required prior to pip install.
 

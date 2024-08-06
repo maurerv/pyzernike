@@ -27,9 +27,4 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 pybind11_add_module(_core src/bindings.cpp)
 target_include_directories(_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
-#include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Zernike)
-#pybind11_add_module(_core src/bindings.cpp)
-#target_include_directories(_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Zernike)
-#target_link_libraries(_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Zernike)
-
 install(TARGETS _core DESTINATION pyzernike)

@@ -3,7 +3,7 @@ requires = ["scikit-build-core", "pybind11"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "zernike_descriptors"
+name = "pyzernike"
 version = "0.1.0"
 description = "A Python package to compute 3D zernike descriptors."
 readme="README.md"
@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-license = "GPL-2.0"
+license = {text = "GPL-2.0"}
 
 [project.urls]
 "Homepage" = "https://github.com/maurerv/pyzernike"

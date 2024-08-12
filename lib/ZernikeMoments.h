@@ -52,6 +52,21 @@ for more information, see the paper:
 #include "Factorial.h"
 #include "ScaledGeometricMoments.h"
 
+void printProgressBar(int progress, int total, int barWidth = 60) {
+  float ratio = static_cast<float>(progress) / total;
+  int filledWidth = static_cast<int>(barWidth * ratio);
+
+  std::cout << "\r[";
+  for (int i = 0; i < barWidth; ++i) {
+    if (i < filledWidth)
+      std::cout << "#";
+    else
+      std::cout << "-";
+  }
+  std::cout << "] " << static_cast<int>(ratio * 100.0) << "%";
+  std::cout.flush();
+}
+
 /**
  * Struct representing a complex coefficient of a moment of order (p_,q_,r_).
  */
@@ -224,9 +239,15 @@ public:
       dz2[i] = dz[i] * dz[i];
     }
 
+    long total_iterations = dimX;
+    long progress = 0;
 // origin is at the grid center, all voxels are projected onto the unit sphere
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic)
     for (int x = 0; x < dimX; ++x) {
+
+#pragma omp critical
+      { printProgressBar(progress, total_iterations); }
+
       for (int y = 0; y < dimY; ++y) {
         dxy2 = dx2[y] + dy2[x];
         for (int z = 0; z < dimZ; ++z) {
@@ -276,9 +297,12 @@ public:
           _grid[x][y][z] = fVal;
         }
       }
+      progress++;
     }
 
     // NormalizeGridValues (_grid);
+    printProgressBar(total_iterations, total_iterations);
+    std::cout << std::endl;
   }
 
   void NormalizeGridValues(ComplexT3D &_grid);

@@ -16,6 +16,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies=[
+    "numpy>=1.22.2,<2.0",
+]
 license = {text = "GPL-2.0"}
 
 [project.urls]

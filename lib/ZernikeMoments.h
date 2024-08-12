@@ -207,7 +207,7 @@ public:
    * @param _maxL Max value for l freq index.
    */
   void Reconstruct(ComplexT3D &_grid, T _xCOG, T _yCOG, T _zCOG, T _scale,
-                   int _minN, int _maxN, int _minL, int _maxL) {
+                   int _minN = 0, int _maxN = 100, int _minL = 0, int _maxL = 100) {
     if (_maxN == 100)
       _maxN = order_;
 
@@ -249,7 +249,7 @@ public:
       { printProgressBar(progress, total_iterations); }
 
       for (int y = 0; y < dimY; ++y) {
-        dxy2 = dx2[y] + dy2[x];
+        dxy2 = dx2[x] + dy2[y];
         for (int z = 0; z < dimZ; ++z) {
           dxyz2 = dxy2 + dz2[z];
 

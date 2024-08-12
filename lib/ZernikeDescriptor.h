@@ -98,8 +98,8 @@ public:
    * @param _maxL Max value for l freq index.
    *
    */
-  void Reconstruct(ComplexT3D &_grid, int _minN, int _maxN, int _minL,
-                   int _maxL) {
+  void Reconstruct(ComplexT3D &_grid, int _minN = 0, int _maxN = 100,
+                   int _minL = 0, int _maxL = 100) {
     // the scaling between the reconstruction and original grid
     T fac = (T)(_grid.size()) / (T)dim_;
     zm_.Reconstruct(_grid, center[0] * fac, center[1] * fac, center[2] * fac,
@@ -119,7 +119,6 @@ public:
 
     for (int i = 0; i < dim; ++i) {
       temp = invariants_[i];
-      std::cout << invariants_[i] << std::endl;
       outfile.write((char *)(&temp), sizeof(float));
     }
   }
@@ -174,7 +173,7 @@ private:
     center[1] = gm.GetMoment(0, 1, 0) / zeroMoment_;
     center[2] = gm.GetMoment(0, 0, 1) / zeroMoment_;
 
-    T recScale = (T) 2.0 * ComputeScale_RadiusVar();
+    T recScale = (T)2.0 * ComputeScale_RadiusVar();
 
     scale_ = (T)1 / recScale;
   }
@@ -245,7 +244,7 @@ private:
       }
     }
 
-    return (T) sqrt(sum / nVoxels);
+    return (T)sqrt(sum / nVoxels);
   }
 
   /*

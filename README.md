@@ -14,7 +14,7 @@ from pyzernike import ZernikeDescriptor
 arr = np.zeros((50,50,50), dtype = np.float32)
 arr[15:25, 5:15, 35:45] = 1
 
-# Fit the Zernike descriptor up to order 8
+# Fit the Zernike descriptor up to order 8, using data precision (float32 or float64).
 descriptor = ZernikeDescriptor.fit(data = arr, order = 8)
 
 # Get Zernike coefficients

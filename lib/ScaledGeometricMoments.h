@@ -126,7 +126,74 @@ public:
   T GetMoment(int _i, int _j, int _k) { return moments_[_i][_j][_k]; }
 
 private:
-  void Compute();
+  void Compute() {
+    int arrayDim = zDim_;
+    int layerDim = yDim_ * zDim_;
+
+    int diffArrayDim = zDim_ + 1;
+    int diffLayerDim = (yDim_ + 1) * zDim_;
+    int diffGridDim = (xDim_ + 1) * layerDim;
+
+    T1D diffGrid(diffGridDim);
+    T1D diffLayer(diffLayerDim);
+    T1D diffArray(diffArrayDim);
+
+    T1D layer(layerDim);
+    T1D array(arrayDim);
+    T moment;
+
+    typename T1D::iterator iter = voxels_.begin();
+    typename T1D::iterator diffIter = diffGrid.begin();
+
+    // generate the diff version of the voxel grid in x direction
+    for (int x = 0; x < layerDim; ++x) {
+      ComputeDiffFunction(iter, diffIter, xDim_);
+
+      iter += xDim_;
+      diffIter += xDim_ + 1;
+    }
+
+    for (int i = 0; i <= maxOrder_; ++i) {
+      diffIter = diffGrid.begin();
+      for (int p = 0; p < layerDim; ++p) {
+        // multiply the diff function with the sample values
+        T1DIter sampleIter(samples_[0].begin());
+        layer[p] = Multiply(diffIter, sampleIter, xDim_ + 1);
+
+        diffIter += xDim_ + 1;
+      }
+
+      iter = layer.begin();
+      diffIter = diffLayer.begin();
+      for (int y = 0; y < arrayDim; ++y) {
+        ComputeDiffFunction(iter, diffIter, yDim_);
+
+        iter += yDim_;
+        diffIter += yDim_ + 1;
+      }
+
+      for (int j = 0; j < maxOrder_ + 1 - i; ++j) {
+        diffIter = diffLayer.begin();
+        for (int p = 0; p < arrayDim; ++p) {
+          T1DIter sampleIter(samples_[1].begin());
+          array[p] = Multiply(diffIter, sampleIter, yDim_ + 1);
+
+          diffIter += yDim_ + 1;
+        }
+
+        iter = array.begin();
+        diffIter = diffArray.begin();
+        ComputeDiffFunction(iter, diffIter, zDim_);
+
+        for (int k = 0; k < maxOrder_ + 1 - i - j; ++k) {
+          T1DIter sampleIter(samples_[2].begin());
+
+          moment = Multiply(diffIter, sampleIter, zDim_ + 1);
+          moments_[i][j][k] = moment / ((1 + i) * (1 + j) * (1 + k));
+        }
+      }
+    }
+  }
 
   void ComputeSamples(double _xCOG, double _yCOG, double _zCOG, double _scale) {
     samples_.resize(3); // 3 dimensions
@@ -166,73 +233,3 @@ private:
   T2D samples_; // samples of the scaled and translated grid in x, y, z
   T3D moments_; // array containing the cumulative moments
 };
-
-template <class VoxelT, class MomentT>
-void ScaledGeometricalMoments<VoxelT, MomentT>::Compute() {
-  int arrayDim = zDim_;
-  int layerDim = yDim_ * zDim_;
-
-  int diffArrayDim = zDim_ + 1;
-  int diffLayerDim = (yDim_ + 1) * zDim_;
-  int diffGridDim = (xDim_ + 1) * layerDim;
-
-  T1D diffGrid(diffGridDim);
-  T1D diffLayer(diffLayerDim);
-  T1D diffArray(diffArrayDim);
-
-  T1D layer(layerDim);
-  T1D array(arrayDim);
-  T moment;
-
-  typename T1D::iterator iter = voxels_.begin();
-  typename T1D::iterator diffIter = diffGrid.begin();
-
-  // generate the diff version of the voxel grid in x direction
-  for (int x = 0; x < layerDim; ++x) {
-    ComputeDiffFunction(iter, diffIter, xDim_);
-
-    iter += xDim_;
-    diffIter += xDim_ + 1;
-  }
-
-  for (int i = 0; i <= maxOrder_; ++i) {
-    diffIter = diffGrid.begin();
-    for (int p = 0; p < layerDim; ++p) {
-      // multiply the diff function with the sample values
-      T1DIter sampleIter(samples_[0].begin());
-      layer[p] = Multiply(diffIter, sampleIter, xDim_ + 1);
-
-      diffIter += xDim_ + 1;
-    }
-
-    iter = layer.begin();
-    diffIter = diffLayer.begin();
-    for (int y = 0; y < arrayDim; ++y) {
-      ComputeDiffFunction(iter, diffIter, yDim_);
-
-      iter += yDim_;
-      diffIter += yDim_ + 1;
-    }
-
-    for (int j = 0; j < maxOrder_ + 1 - i; ++j) {
-      diffIter = diffLayer.begin();
-      for (int p = 0; p < arrayDim; ++p) {
-        T1DIter sampleIter(samples_[1].begin());
-        array[p] = Multiply(diffIter, sampleIter, yDim_ + 1);
-
-        diffIter += yDim_ + 1;
-      }
-
-      iter = array.begin();
-      diffIter = diffArray.begin();
-      ComputeDiffFunction(iter, diffIter, zDim_);
-
-      for (int k = 0; k < maxOrder_ + 1 - i - j; ++k) {
-        T1DIter sampleIter(samples_[2].begin());
-
-        moment = Multiply(diffIter, sampleIter, zDim_ + 1);
-        moments_[i][j][k] = moment / ((1 + i) * (1 + j) * (1 + k));
-      }
-    }
-  }
-}

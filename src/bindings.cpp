@@ -21,6 +21,10 @@ public:
     descriptor = std::make_unique<ZernikeDescriptor<T, T>>(ptr, dim, order);
   }
 
+  PyZernikeDescriptor(const char *fname, int order) {
+    descriptor = std::make_unique<ZernikeDescriptor<T, T>>(fname, order);
+  }
+
   py::array_t<T> GetDescriptors() const {
     const std::vector<T> &invariants = descriptor->GetInvariants();
     auto result = py::array_t<T>(invariants.size());
@@ -65,6 +69,7 @@ void declare_zernike_descriptor(py::module &m, const std::string &type_suffix) {
       .def(py::init<py::array_t<T, py::array::c_style | py::array::forcecast>,
                     int>(),
            py::arg("data"), py::arg("order"))
+      .def(py::init<const char *, int>(), py::arg("filename"), py::arg("order"))
       .def("get_descriptors", &Class::GetDescriptors)
       .def("save_invariants", &Class::SaveInvariants)
       .def("reconstruct", &Class::Reconstruct, py::arg("dim"),

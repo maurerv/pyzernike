@@ -119,6 +119,7 @@ public:
 
     for (int i = 0; i < dim; ++i) {
       temp = invariants_[i];
+      std::cout << invariants_[i] << std::endl;
       outfile.write((char *)(&temp), sizeof(float));
     }
   }
@@ -136,24 +137,21 @@ private:
     T radius = (T)1 / scale_;
     T sqrRadius = radius * radius;
 
-    T dxy2, dxyz2;
-    std::vector<T> dx(dim_), dx2(dim_);
-    std::vector<T> dy(dim_), dy2(dim_);
-    std::vector<T> dz(dim_), dz2(dim_);
+    T dn, dxy2, dxyz2;
+    std::vector<T> dx2(dim_), dy2(dim_), dz2(dim_);
 
     for (int i = 0; i < dim_; ++i) {
-      dx[i] = (T)i - center[0];
-      dx2[i] = dx[i] * dx[i];
-      dy[i] = (T)i - center[1];
-      dy2[i] = dy[i] * dy[i];
-      dz[i] = (T)i - center[2];
-      dz2[i] = dz[i] * dz[i];
+      dn = (T)i - center[0];
+      dx2[i] = dn * dn;
+      dn = (T)i - center[1];
+      dy2[i] = dn * dn;
+      dn = (T)i - center[2];
+      dz2[i] = dn * dn;
     }
 
-#pragma omp parallel for
     for (int x = 0; x < dim_; ++x) {
       for (int y = 0; y < dim_; ++y) {
-        dxy2 = dx2[y] + dy2[x];
+        dxy2 = dx2[x] + dy2[y];
         for (int z = 0; z < dim_; ++z) {
           dxyz2 = dxy2 + dz2[z];
           if (dxyz2 > sqrRadius) {
@@ -176,7 +174,8 @@ private:
     center[1] = gm.GetMoment(0, 1, 0) / zeroMoment_;
     center[2] = gm.GetMoment(0, 0, 1) / zeroMoment_;
 
-    T recScale = 2.0 * ComputeScale_RadiusVar();
+    T recScale = (T) 2.0 * ComputeScale_RadiusVar();
+
     scale_ = (T)1 / recScale;
   }
 
@@ -216,9 +215,10 @@ private:
    * Computes the average distance between center and all larger-than zero
    * voxels.
    */
-  double ComputeScale_RadiusVar() {
+  T ComputeScale_RadiusVar() {
     T dn, dxy2, dxyz2;
     std::vector<T> dx2(dim_), dy2(dim_), dz2(dim_);
+
     for (int i = 0; i < dim_; ++i) {
       dn = (T)i - center[0];
       dx2[i] = dn * dn;
@@ -228,14 +228,16 @@ private:
       dz2[i] = dn * dn;
     }
 
+    int d = dim_;
     T sum = 0.0;
     int nVoxels = 0;
-    for (int x = 0; x < dim_; ++x) {
-      for (int y = 0; y < dim_; ++y) {
-        dxy2 = dx2[y] + dy2[x];
-        for (int z = 0; z < dim_; ++z) {
+    for (int x = 0; x < d; ++x) {
+      for (int y = 0; y < d; ++y) {
+        dxy2 = dx2[x] + dy2[y];
+        for (int z = 0; z < d; ++z) {
+
           dxyz2 = dxy2 + dz2[z];
-          if (std::fabs(voxels_[(z + dim_ * y) * dim_ + x]) > 0) {
+          if (std::fabs(voxels_[(z + d * y) * d + x]) > 0) {
             sum += dxyz2;
             nVoxels++;
           }
@@ -243,35 +245,37 @@ private:
       }
     }
 
-    return (T)sqrt(sum / nVoxels);
+    return (T) sqrt(sum / nVoxels);
   }
 
   /*
    * Reads cubic grid from a binary file.
    */
-  T *ReadGrid(const char *_fname, int &_dim_) {
-    std::ifstream infile(_fname, std::ios_base::binary | std::ios_base::in);
+  T *ReadGrid(const char *_fname, int &dim_) {
+    std::ifstream infile(_fname);
     if (!infile) {
       std::cerr << "Cannot open " << _fname << " for reading.\n";
       exit(-1);
     }
 
-    vector<T> tempGrid;
+    std::vector<T> tempGrid;
+    std::string line;
     TIn temp;
 
-    // read the grid values
-    while (infile.read((char *)(&temp), sizeof(TIn))) {
-      tempGrid.push_back((T)temp);
+    // Read the grid values
+    while (std::getline(infile, line)) {
+      std::istringstream iss(line);
+      if (iss >> temp) {
+        tempGrid.push_back(static_cast<T>(temp));
+      }
     }
 
     int d = tempGrid.size();
-    double f = pow((double)d, 1.0 / 3.0);
-    _dim_ = floor(f + 0.5);
+    double f = std::pow(static_cast<double>(d), 1.0 / 3.0);
+    dim_ = static_cast<int>(std::floor(f + 0.5));
 
     T *result = new T[d];
-    for (int i = 0; i < d; ++i) {
-      result[i] = tempGrid[i];
-    }
+    std::copy(tempGrid.begin(), tempGrid.end(), result);
 
     return result;
   }

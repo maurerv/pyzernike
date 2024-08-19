@@ -34,7 +34,6 @@ We recommend installation using one of the following methods
 
 | Method   | Command                                                 |
 |----------|---------------------------------------------------------|
-| PyPi     | `pip install zernike-descriptors`                       |
 | Source   | `pip install git+https://github.com/maurerv/pyzernike`  |
 
 
